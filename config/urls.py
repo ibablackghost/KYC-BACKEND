@@ -16,8 +16,21 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from drf_spectacular.views import SpectacularSwaggerView
+from rest_framework.permissions import AllowAny
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('kyc/', include('kyc.urls')),
+    path(
+        'swagger/',
+        SpectacularSwaggerView.as_view(
+            url_name='schema',
+            authentication_classes=[],
+            permission_classes=[AllowAny],
+        ),
+        name='swagger-ui',
+    ),
+    path('api/', include('kyc.urls')),
 ]
+
+handler404 = "kyc.views.api_not_found"

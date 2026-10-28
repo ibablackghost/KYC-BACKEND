@@ -10,10 +10,16 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+from urllib.parse import urlsplit
+
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
@@ -25,7 +31,7 @@ SECRET_KEY = 'django-insecure-xe#kz55kyfaoqi#+xgrh&^6y#zx&ph-k&w)ve^%s^bj$a0ls2*
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 
 # Application definition
@@ -37,10 +43,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
+    'rest_framework',
+    'drf_spectacular',
     'kyc',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -121,3 +131,39 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+DIDIT_API_KEY = os.environ.get("DIDIT_API_KEY", "").strip()
+DIDIT_WORKFLOW_ID = os.environ.get("DIDIT_WORKFLOW_ID", "").strip()
+# Adresse vue par le téléphone sur le réseau local.
+PUBLIC_APP_URL = os.environ.get("PUBLIC_APP_URL", "http://localhost:4200").strip() or "http://localhost:4200"
+
+_public_parts = urlsplit(PUBLIC_APP_URL)
+_public_origin = (
+    f"{_public_parts.scheme}://{_public_parts.netloc}"
+    if _public_parts.scheme and _public_parts.netloc
+    else "http://localhost:4200"
+)
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(["http://localhost:4200", _public_origin]))
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "kyc.renderers.UnicodeJSONRenderer",
+    ],
+    "EXCEPTION_HANDLER": "kyc.exceptions.api_exception_handler",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Ouverture de compte KYC",
+    "DESCRIPTION": "API consommée par le frontend Angular. La clé Didit reste sur le serveur.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "PREPROCESSING_HOOKS": ["kyc.schema.only_api_endpoints"],
+}
