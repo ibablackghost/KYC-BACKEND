@@ -1,4 +1,5 @@
 import json
+import tempfile
 from datetime import date, timedelta
 from unittest.mock import Mock, patch
 
@@ -49,6 +50,13 @@ def didit_response(status, body):
     response = Mock()
     response.status_code = status
     response.json.return_value = body
+    return response
+
+
+def _jpeg_response():
+    response = Mock()
+    response.status_code = 200
+    response.content = b"\xff\xd8\xff\xd9"
     return response
 
 
@@ -186,6 +194,7 @@ class MappingTests(TestCase):
 
 
 @CONFIGURED
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class AccountApiTests(APITestCase):
     def test_health_reports_configuration(self):
         response = self.client.get("/api/health/")
@@ -316,10 +325,12 @@ class AccountApiTests(APITestCase):
         request_mock.assert_not_called()
         self.assertEqual(newer.email, "new@example.com")
 
+    @patch("kyc.images.requests.get")
     @patch("kyc.didit.requests.request")
-    def test_detail_refreshes_until_the_status_is_terminal(self, request_mock):
+    def test_detail_refreshes_until_the_status_is_terminal(self, request_mock, image_mock):
         account = make_account(session_id=SESSION_ID, status="In Progress")
         request_mock.return_value = didit_response(200, decision_payload())
+        image_mock.return_value = _jpeg_response()
 
         response = self.client.get(f"/api/accounts/{account.id}/")
 
@@ -337,6 +348,26 @@ class AccountApiTests(APITestCase):
         second = self.client.get(f"/api/accounts/{account.id}/")
         self.assertEqual(second.status_code, 200)
         request_mock.assert_not_called()
+
+    @patch("kyc.images.requests.get")
+    @patch("kyc.didit.requests.request")
+    def test_decision_keeps_id_card_and_face_photo(self, request_mock, image_mock):
+        account = make_account(session_id=SESSION_ID, status="In Progress")
+        request_mock.return_value = didit_response(200, decision_payload())
+        image_mock.return_value = _jpeg_response()
+
+        response = self.client.get(f"/api/accounts/{account.id}/")
+
+        document = response.json()["account"]["verification"]["document"]
+        liveness = response.json()["account"]["verification"]["liveness"]
+        self.assertIn("/media/kyc/id-front/", document["frontImageUrl"])
+        self.assertIn("/media/kyc/id-back/", document["backImageUrl"])
+        self.assertIn("/media/kyc/id-portrait/", document["portraitImageUrl"])
+        self.assertIn("/media/kyc/face/", liveness["photoUrl"])
+        stored = json.dumps(Account.objects.get(pk=account.id).verification)
+        self.assertNotIn("media.example", stored)
+        self.assertNotIn("portrait_image", stored)
+        self.assertNotIn("reference_image", stored)
 
     @patch("kyc.didit.requests.request")
     def test_failed_refresh_keeps_the_last_known_dossier(self, request_mock):
@@ -373,8 +404,9 @@ class AccountApiTests(APITestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json(), {"message": "Dossier introuvable."})
 
+    @patch("kyc.images.requests.get", side_effect=requests.ConnectionError("image"))
     @patch("kyc.didit.requests.request")
-    def test_verification_lookup_attaches_vendor_data(self, request_mock):
+    def test_verification_lookup_attaches_vendor_data(self, request_mock, _image_mock):
         account = make_account(status="Not Started")
         request_mock.return_value = didit_response(
             200,

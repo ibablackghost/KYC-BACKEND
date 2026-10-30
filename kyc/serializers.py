@@ -89,12 +89,19 @@ class DocumentSerializer(serializers.Serializer):
     documentNumber = serializers.CharField(allow_blank=True)
     expirationDate = serializers.CharField(allow_blank=True)
     warnings = serializers.ListField(child=serializers.CharField())
+    frontImageUrl = serializers.CharField(allow_null=True, required=False)
+    backImageUrl = serializers.CharField(allow_null=True, required=False)
+    portraitImageUrl = serializers.CharField(allow_null=True, required=False)
 
 
 class CheckSerializer(serializers.Serializer):
     status = serializers.CharField(allow_blank=True)
     score = serializers.FloatField(allow_null=True)
     present = serializers.BooleanField()
+
+
+class LivenessSerializer(CheckSerializer):
+    photoUrl = serializers.CharField(allow_null=True, required=False)
 
 
 class AmlSerializer(serializers.Serializer):
@@ -105,7 +112,7 @@ class AmlSerializer(serializers.Serializer):
 class VerificationSerializer(serializers.Serializer):
     status = serializers.CharField(allow_blank=True)
     document = DocumentSerializer(allow_null=True)
-    liveness = CheckSerializer(allow_null=True)
+    liveness = LivenessSerializer(allow_null=True)
     faceMatch = CheckSerializer(allow_null=True)
     accountReady = serializers.BooleanField()
     workflowGap = serializers.CharField(allow_null=True)

@@ -18,6 +18,10 @@ class Account(models.Model):
     verification_url = models.TextField(null=True, blank=True)
     verification = models.JSONField(null=True, blank=True)
     verification_error = models.TextField(null=True, blank=True)
+    id_front = models.FileField(upload_to="kyc/id-front/", null=True, blank=True)
+    id_back = models.FileField(upload_to="kyc/id-back/", null=True, blank=True)
+    id_portrait = models.FileField(upload_to="kyc/id-portrait/", null=True, blank=True)
+    face_photo = models.FileField(upload_to="kyc/face/", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

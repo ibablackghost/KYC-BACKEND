@@ -15,6 +15,7 @@ from .didit import (
     didit_configured,
     fetch_decision,
 )
+from .images import store_verification_images
 from .mapping import is_terminal, map_verification
 from .models import Account
 from .payload import account_payload
@@ -57,7 +58,7 @@ class AccountListCreateView(PublicAPIView):
     )
     def get(self, request):
         accounts = Account.objects.order_by("-created_at")
-        return Response({"accounts": [account_payload(account) for account in accounts]})
+        return Response({"accounts": [account_payload(account, request) for account in accounts]})
 
     @extend_schema(
         summary="Créer un dossier et une session Didit",
@@ -100,7 +101,7 @@ class AccountListCreateView(PublicAPIView):
         account.save(update_fields=["session_id", "verification_url", "status", "updated_at"])
         return Response(
             {
-                "account": account_payload(account),
+                "account": account_payload(account, request),
                 "verificationUrl": account.verification_url,
             },
             status=201,
@@ -117,7 +118,7 @@ class AccountDetailView(PublicAPIView):
     def get(self, request, account_id):
         account = _get_account(account_id)
         _refresh_if_needed(account)
-        return Response({"account": account_payload(account)})
+        return Response({"account": account_payload(account, request)})
 
 
 class VerificationDetailView(PublicAPIView):
@@ -141,7 +142,7 @@ class VerificationDetailView(PublicAPIView):
                 return Response({"message": exc.message}, status=exc.status_code)
         else:
             _refresh_if_needed(account)
-        return Response({"account": account_payload(account)})
+        return Response({"account": account_payload(account, request)})
 
 
 def api_not_found(request, exception):
@@ -158,7 +159,9 @@ def _get_account(account_id):
 
 
 def _refresh_if_needed(account):
-    if not account.session_id or is_terminal(account.status):
+    if not account.session_id:
+        return
+    if is_terminal(account.status) and _has_stored_images(account):
         return
     try:
         decision = fetch_decision(account.session_id)
@@ -195,7 +198,12 @@ def _apply_decision(account, decision, session_id=None):
             account.verification_url = session_url.strip()
     account.verification = map_verification(decision)
     account.verification_error = None
+    store_verification_images(account, decision)
     account.save()
+
+
+def _has_stored_images(account):
+    return bool(account.id_front or account.id_back or account.id_portrait or account.face_photo)
 
 
 def _account_from_vendor(vendor_data):
